@@ -19,7 +19,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     let snippets: Snippets | null = null;
     const files = await vscode.workspace.findFiles(
-      `.vscode/*.code-snippets`,
+      `.vscode/*-postfix-maker.json`,
       "**/node_modules/**"
     );
     files.forEach((file) => {
