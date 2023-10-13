@@ -14,6 +14,9 @@ type Snippets = {
 
 export async function activate(context: vscode.ExtensionContext) {
   vscode.commands.registerCommand('postfix-maker.activate', async () => {
+    // first, dispose of any existing snippets.
+    context.subscriptions.forEach(sub => sub.dispose());
+
     let snippets: Snippets | null = null;
     const files = await vscode.workspace.findFiles(
       `.vscode/*.code-snippets`,
