@@ -1,53 +1,100 @@
 import * as vscode from 'vscode';
+import { readFile } from 'fs';
 
-export function activate(context: vscode.ExtensionContext) {
-  context.subscriptions.push(
-    vscode.languages.registerCompletionItemProvider(
-      {
-        language: "go",
-        scheme: "file",
-      },
-      {
-        provideCompletionItems(
-          document: vscode.TextDocument,
-          position: vscode.Position,
-          token: vscode.CancellationToken,
-          context: vscode.CompletionContext
-        ) {
-          let line = document.lineAt(position.line);
-          let dotIdx = line.text.lastIndexOf(".", position.character);
-          if (dotIdx === -1) {
-            return [];
+type Snippet = {
+  scope: string;
+  prefix: string;
+  body: string[];
+  description: string;
+};
+
+type Snippets = {
+  [key: string]: Snippet;
+};
+
+export async function activate(context: vscode.ExtensionContext) {
+  vscode.commands.registerCommand('postfix-maker.activate', async () => {
+    let snippets: Snippets | null = null;
+    const files = await vscode.workspace.findFiles(
+      `.vscode/*.code-snippets`,
+      "**/node_modules/**"
+    );
+    files.forEach((file) => {
+      readFile(file.path, (err, data) => {
+        const parsedObject = JSON.parse(data.toString());
+
+        snippets = parsedObject as Snippets;
+
+        const groupedByScope: { [scope: string]: Snippet[] } = {};
+
+        for (const key in snippets) {
+          const snippet = snippets[key];
+          if (!groupedByScope[snippet.scope]) {
+            groupedByScope[snippet.scope] = [];
           }
+          groupedByScope[snippet.scope].push(snippet);
+        }
 
-          let code = line.text.substring(
-            line.firstNonWhitespaceCharacterIndex,
-            dotIdx
-          );
+        for (const scope in groupedByScope) {
+          const snippets = groupedByScope[scope];
+          context.subscriptions.push(
+            vscode.languages.registerCompletionItemProvider(
+              {
+                language: scope,
+                scheme: "file",
+              },
+              {
+                provideCompletionItems(
+                  document: vscode.TextDocument,
+                  position: vscode.Position,
+                  token: vscode.CancellationToken,
+                  context: vscode.CompletionContext
+                ) {
+                  let line = document.lineAt(position.line);
+                  let dotIdx = line.text.lastIndexOf(".", position.character);
+                  if (dotIdx === -1) {
+                    return [];
+                  }
 
-          // len
-          let lengthSnippet = new vscode.CompletionItem("len");
-          lengthSnippet.additionalTextEdits = [
-          vscode.TextEdit.delete(
-            new vscode.Range(
-              position.translate(0, -(code.length + 1)),
-              position
+                  let code = line.text.substring(
+                    line.firstNonWhitespaceCharacterIndex,
+                    dotIdx
+                  );
+
+                  const result: vscode.CompletionItem[] = [];
+                  for (let i = 0; i < snippets.length; i++) {
+                    const snippet = snippets[i];
+                    let item = new vscode.CompletionItem(snippet.prefix);
+                    item.additionalTextEdits = [
+                      vscode.TextEdit.delete(
+                        new vscode.Range(
+                          position.translate(0, -(code.length + 1)),
+                          position
+                        )
+                      ),
+                    ];
+                    item.insertText = new vscode.SnippetString(snippet.body.join("").replace("$1", code));
+                    item.documentation = snippet.description;
+                    item.kind = vscode.CompletionItemKind.Snippet;
+                    item.sortText = "\u0000";
+                    item.preselect = true;
+                    result.push(item);
+                  }
+
+                  return result;
+                },
+              },
+              "."
             )
-          ),
-          ];
-          lengthSnippet.insertText = new vscode.SnippetString(`len(${code})`);
-          lengthSnippet.documentation = 'my custom postfix completion';
-          lengthSnippet.kind = vscode.CompletionItemKind.Snippet;
-          lengthSnippet.sortText = "\u0000";
-          lengthSnippet.preselect = true;
+          );
+        }
+      });
+      vscode.window.showInformationMessage('postfix-maker activated: ' + file.path);
+      }
+    );
+	});
 
-          return [lengthSnippet];
-        },
-      },
-      "."
-    )
-  );
+  // context.subscriptions.push(disposable);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
