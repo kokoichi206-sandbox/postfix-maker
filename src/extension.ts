@@ -1,26 +1,103 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { readFile } from 'fs';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+type Snippet = {
+  scope: string;
+  prefix: string;
+  body: string[];
+  description: string;
+};
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "postfix-maker" is now active!');
+type Snippets = {
+  [key: string]: Snippet;
+};
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('postfix-maker.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from postfix-maker!');
+export async function activate(context: vscode.ExtensionContext) {
+  vscode.commands.registerCommand('postfix-maker.activate', async () => {
+    // first, dispose of any existing snippets.
+    context.subscriptions.forEach(sub => sub.dispose());
+
+    let snippets: Snippets | null = null;
+    const files = await vscode.workspace.findFiles(
+      `.vscode/*.code-snippets`,
+      "**/node_modules/**"
+    );
+    files.forEach((file) => {
+      readFile(file.path, (err, data) => {
+        const parsedObject = JSON.parse(data.toString());
+
+        snippets = parsedObject as Snippets;
+
+        const groupedByScope: { [scope: string]: Snippet[] } = {};
+
+        for (const key in snippets) {
+          const snippet = snippets[key];
+          if (!groupedByScope[snippet.scope]) {
+            groupedByScope[snippet.scope] = [];
+          }
+          groupedByScope[snippet.scope].push(snippet);
+        }
+
+        for (const scope in groupedByScope) {
+          const snippets = groupedByScope[scope];
+          context.subscriptions.push(
+            vscode.languages.registerCompletionItemProvider(
+              {
+                language: scope,
+                scheme: "file",
+              },
+              {
+                provideCompletionItems(
+                  document: vscode.TextDocument,
+                  position: vscode.Position,
+                  token: vscode.CancellationToken,
+                  context: vscode.CompletionContext
+                ) {
+                  let line = document.lineAt(position.line);
+                  let dotIdx = line.text.lastIndexOf(".", position.character);
+                  if (dotIdx === -1) {
+                    return [];
+                  }
+
+                  let code = line.text.substring(
+                    line.firstNonWhitespaceCharacterIndex,
+                    dotIdx
+                  );
+
+                  const result: vscode.CompletionItem[] = [];
+                  for (let i = 0; i < snippets.length; i++) {
+                    const snippet = snippets[i];
+                    let item = new vscode.CompletionItem(snippet.prefix);
+                    item.additionalTextEdits = [
+                      vscode.TextEdit.delete(
+                        new vscode.Range(
+                          position.translate(0, -(code.length + 1)),
+                          position
+                        )
+                      ),
+                    ];
+                    item.insertText = new vscode.SnippetString(snippet.body.join("").replace("$1", code));
+                    item.documentation = snippet.description;
+                    item.kind = vscode.CompletionItemKind.Snippet;
+                    item.sortText = "\u0000";
+                    item.preselect = true;
+                    result.push(item);
+                  }
+
+                  return result;
+                },
+              },
+              "."
+            )
+          );
+        }
+      });
+      vscode.window.showInformationMessage('postfix-maker activated: ' + file.path);
+      }
+    );
 	});
 
-	context.subscriptions.push(disposable);
+  // context.subscriptions.push(disposable);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
