@@ -1,6 +1,6 @@
 # postfix-maker
 
-This extension makes your original *postfix-snippets* available.
+This VSCode extension makes your original *postfix-snippets* available.
 
 ## Features
 
@@ -30,3 +30,7 @@ The syntax is the same as the snippets for [prefix](https://code.visualstudio.co
 - Only supports the JSON structure 
 
 ## Release Notes
+
+## License
+
+This repository is under [MIT License](./LICENSE).
